@@ -5,13 +5,14 @@ Institutional Quant & Risk Management Terminal (XSpring Dark-Green Theme)
 1. USD/THB Mean Reversion
 2. USDT vs USDC Z-Score & Spread (THB)
 3. Multi-Asset Realised Volatility
-4. XSpring Multi-Exchange Spread & Arbitrage Analysis
-5. Manual Arbitrage Simulator (Pre-funding & Inventory Risk) — จาก nonono.py
-6. Spot vs Futures Basis Arbitrage — จาก Future.py
+4. XSpring Multi-Exchange Spread & Arbitrage Backtest + เงินทุนจริงของคุณ (Live Position PnL)
+   — ใช้ราคาจริงชุดเดียวกันทั้งสองส่วน ไม่ใช่กรอกราคาปัจจุบันแยกต่างหากอีกต่อไป
+5. Spot vs Futures Basis Arbitrage — จาก Future.py
 
-v5.0 — รวม 3 ไฟล์ (Full.py + nonono.py + Future.py) เป็นเว็บเดียว ทุกโมดูลใช้ธีมมืด/เขียว
-เดียวกัน และเลือกได้จาก dropdown ด้านซ้ายเหมือนเดิม โมดูล 5-6 เป็นเครื่องมือคำนวณ manual
-(กรอกราคาเอง ไม่ได้ดึงราคาตลาดสด) ส่วนโมดูล 1-4 ยังคงดึงราคาจริงเหมือนเดิม
+v5.1 — รวมโมดูล "XSpring Multi-Exchange Arbitrage Backtest" กับ "Manual Arbitrage
+Simulator" (เดิมจาก nonono.py) เป็นโมดูลเดียว: ราคาล่าสุด/ราคาย้อนหลังที่ใช้คำนวณกำไร
+สเปรดและ Holding PnL ของเงินทุนที่ผู้ใช้ตุนไว้จริง ดึงมาจากชุดข้อมูลราคาจริงของ Backtest
+โดยตรง (ไม่ต้องพิมพ์ราคาปัจจุบันเองอีกต่อไป) ทำให้ dropdown เหลือ 5 โมดูลและข้อมูลเชื่อมกัน
 
 v4.0 — Upgrade notes:
 - เปลี่ยนกราฟทั้งหมดจาก matplotlib (รูปนิ่ง) เป็น Plotly (โต้ตอบได้: เมาส์ชี้ดูค่าตัวเลข/วันที่จริง,
@@ -187,9 +188,8 @@ app_mode = st.sidebar.selectbox(
         "1. USD/THB Mean Reversion Backtest",
         "2. USDT vs USDC Z-Score & Spread (THB)",
         "3. Multi-Asset Realised Volatility",
-        "4. XSpring Multi-Exchange Arbitrage (1Y)",
-        "5. Manual Arbitrage Simulator (Pre-funding & Inventory)",
-        "6. Spot vs Futures Basis Arbitrage",
+        "4. XSpring Arbitrage — Backtest & Live Position PnL",
+        "5. Spot vs Futures Basis Arbitrage",
     ]
 )
 
@@ -784,9 +784,9 @@ elif app_mode == "3. Multi-Asset Realised Volatility":
 # ----------------------------------------------------
 # MODULE 4: XSPRING MULTI-EXCHANGE ARBITRAGE BACKTEST — ราคาจริงจาก Public API
 # ----------------------------------------------------
-elif app_mode == "4. XSpring Multi-Exchange Arbitrage (1Y)":
+elif app_mode == "4. XSpring Arbitrage — Backtest & Live Position PnL":
     st.markdown("# XSpring Multi-Exchange Spread & Arbitrage — Backtest")
-    st.markdown(f"<span style='color: {MUTED_TEXT};'>Backtest ย้อนหลังด้วยราคาจริงจากกระดานซื้อขายจริง (ไม่ใช่ข้อมูลจำลอง) — "
+    st.markdown(f"<span style='color: {MUTED_TEXT};'>Backtest ย้อนหลังด้วยราคาจริงจากกระดานซื้อขายจริง (ไม่ใช่ข้อมูลจำลอง) แล้วต่อยอดคำนวณกำไร/ขาดทุนของเงินทุนที่คุณตุนไว้จริง โดยใช้ราคาชุดเดียวกันนี้ — "
                 f"ราคา XSpring เองไม่มี public API จึงประมาณจากราคา Bitkub ที่ XSpring อ้างอิงอยู่จริง</span>",
                 unsafe_allow_html=True)
 
@@ -1016,98 +1016,107 @@ elif app_mode == "4. XSpring Multi-Exchange Arbitrage (1Y)":
 
     show_data_table(df_bt, "xspring_arbitrage_real.csv")
 
-# ----------------------------------------------------
-# MODULE 5: MANUAL ARBITRAGE SIMULATOR (Pre-funding & Inventory Risk)
-# ----------------------------------------------------
-elif app_mode == "5. Manual Arbitrage Simulator (Pre-funding & Inventory)":
-    st.markdown("# ⚖️ Manual Arbitrage Simulator — Pre-funding & Inventory Risk")
-    st.markdown(
-        f"<span style='color: {MUTED_TEXT};'>เครื่องมือจำลองราคาแบบจัดเต็ม: กรอกราคา/เงินต้นเอง แล้วดูทั้งกำไรสเปรด (Trading Profit) "
-        f"และความเสี่ยงสต็อก (Holding Loss/Gain) — ไม่ได้ดึงราคาตลาดสด ใช้สำหรับ what-if แบบ manual</span>",
-        unsafe_allow_html=True,
+    # ----------------------------------------------------
+    # PART 3 (connected to backtest above): เงินทุนจริงของคุณ × ราคาตลาดจริง
+    # ใช้ df_bt / exchange_list_bt ที่ดึงมาจริงแล้วด้านบน แทนที่จะให้กรอกราคาปัจจุบันเอง
+    # ----------------------------------------------------
+    st.markdown("---")
+    st.markdown("### 3. เงินทุนจริงของคุณ × ราคาตลาดจริง (Pre-funded Position → Live PnL)")
+    st.caption(
+        "กรอกแค่เงินต้น/จำนวน BTC/ราคาที่คุณซื้อตุนไว้จริง ระบบจะดึงราคาล่าสุด (และราคาย้อนหลังทั้งเส้น) "
+        "จากชุดข้อมูลจริงในส่วน Backtest ด้านบนมาคำนวณกำไรขาดทุนให้อัตโนมัติ — ไม่ต้องพิมพ์ราคาปัจจุบันเอง เพราะข้อมูลเชื่อมกันแล้ว"
     )
-    st.markdown("<br>", unsafe_allow_html=True)
 
-    st.markdown("### 1. ขั้นตอน Pre-funding (จัดการเงินต้นและซื้อตุนของตั้งต้น)")
-    st.caption("กำหนดเงินต้นที่เตรียมไว้ และราคาตอนที่เอาเงินไปซื้อเหรียญมาแช่ไว้ในกระดานครั้งแรก")
+    foreign_leg = st.selectbox(
+        "เลือกกระดานต่างประเทศที่คุณถือสถานะจริง (จะใช้ราคาจริงของกระดานนี้ทั้งหมด)",
+        exchange_list_bt, key="m4_foreign_leg"
+    )
 
-    m5c1, m5c2 = st.columns(2)
-    with m5c1:
+    latest_xspring_price = float(df_bt["XSpring"].iloc[-1])
+    latest_foreign_price = float(df_bt[foreign_leg].iloc[-1])
+    latest_date_bt = df_bt.index[-1]
+
+    st.info(
+        f"📡 **ราคาล่าสุดที่ดึงมาใช้คำนวณ** (ข้อมูลวันที่ {latest_date_bt:%d %b %Y}): "
+        f"XSpring ≈ **{latest_xspring_price:,.2f} THB** | {foreign_leg} ≈ **{latest_foreign_price:,.2f} THB**"
+    )
+
+    pfc1, pfc2 = st.columns(2)
+    with pfc1:
         st.markdown("#### 🏦 ฝั่ง XSpring (ไทย)")
-        init_cap_xspring = st.number_input("เงินต้นตั้งต้น XSpring (THB)", value=1000000.0, step=10000.0, key="m5_cap_x")
-        pre_xspring = st.number_input("ราคาซื้อตุน BTC ที่ XSpring (THB)", value=70000.0, step=100.0, key="m5_price_x")
-        btc_fund_xspring = st.number_input("จำนวน BTC ที่จะตุนที่ XSpring", value=1.0, step=0.1, key="m5_btc_x")
-
+        init_cap_xspring = st.number_input("เงินต้นตั้งต้น XSpring (THB)", value=1000000.0, step=10000.0, key="m4_cap_x")
+        pre_xspring = st.number_input("ราคาที่ซื้อตุน BTC ไว้จริงที่ XSpring (THB)", value=70000.0, step=100.0, key="m4_price_x")
+        btc_fund_xspring = st.number_input("จำนวน BTC ที่ตุนไว้ที่ XSpring", value=1.0, step=0.1, key="m4_btc_x")
         cost_xspring = pre_xspring * btc_fund_xspring
         remaining_xspring = init_cap_xspring - cost_xspring
-        st.info(f"💰 ใช้ซื้อ BTC: **{cost_xspring:,.2f} THB**\n\n💵 **เงินสดคงเหลือหลังซื้อ:** **{remaining_xspring:,.2f} THB**")
+        st.caption(f"ใช้ซื้อ BTC ไปแล้ว: **{cost_xspring:,.2f} THB** | เงินสดคงเหลือ: **{remaining_xspring:,.2f} THB**")
+    with pfc2:
+        st.markdown(f"#### 🌐 ฝั่ง {foreign_leg} (ต่างประเทศ)")
+        init_cap_foreign = st.number_input(f"เงินต้นตั้งต้น {foreign_leg} (THB)", value=1000000.0, step=10000.0, key="m4_cap_f")
+        pre_foreign = st.number_input(f"ราคาที่ซื้อตุน BTC ไว้จริงที่ {foreign_leg} (THB)", value=70800.0, step=100.0, key="m4_price_f")
+        btc_fund_foreign = st.number_input(f"จำนวน BTC ที่ตุนไว้ที่ {foreign_leg}", value=1.0, step=0.1, key="m4_btc_f")
+        cost_foreign = pre_foreign * btc_fund_foreign
+        remaining_foreign = init_cap_foreign - cost_foreign
+        st.caption(f"ใช้ซื้อ BTC ไปแล้ว: **{cost_foreign:,.2f} THB** | เงินสดคงเหลือ: **{remaining_foreign:,.2f} THB**")
 
-    with m5c2:
-        st.markdown("#### 🌐 ฝั่ง Binance (ต่างประเทศ)")
-        init_cap_binance = st.number_input("เงินต้นตั้งต้น Binance (THB)", value=1000000.0, step=10000.0, key="m5_cap_b")
-        pre_binance = st.number_input("ราคาซื้อตุน BTC ที่ Binance (THB)", value=70800.0, step=100.0, key="m5_price_b")
-        btc_fund_binance = st.number_input("จำนวน BTC ที่จะตุนที่ Binance", value=1.0, step=0.1, key="m5_btc_b")
-
-        cost_binance = pre_binance * btc_fund_binance
-        remaining_binance = init_cap_binance - cost_binance
-        st.info(f"💰 ใช้ซื้อ BTC: **{cost_binance:,.2f} THB**\n\n💵 **เงินสดคงเหลือหลังซื้อ:** **{remaining_binance:,.2f} THB**")
-
-    total_init_cap_m5 = init_cap_xspring + init_cap_binance
-    total_initial_btc_cost_m5 = cost_xspring + cost_binance
-    total_remaining_cash_m5 = remaining_xspring + remaining_binance
-
-    st.success(
-        f"📊 **สรุปพอร์ตตั้งต้น:** เงินต้นรวม **{total_init_cap_m5:,.2f} THB** | "
-        f"ต้นทุน BTC รวม **{total_initial_btc_cost_m5:,.2f} THB** | เงินสดเหลือรวม **{total_remaining_cash_m5:,.2f} THB**"
+    total_initial_btc_cost_pf = cost_xspring + cost_foreign
+    trade_size_pf = st.number_input(
+        "จำนวน BTC ที่จะยิงเทรดทำกำไรสเปรด ณ ราคาล่าสุด", value=0.03, step=0.001, key="m4_trade_size_pf"
     )
 
-    st.markdown("---")
-    st.markdown("### 2. ขั้นตอน Execution & Portfolio Risk (วัดผลกำไรและสุขภาพพอร์ต)")
-    st.caption("เมื่อราคาหน้ากระดานเปลี่ยนไป บอทวิ่งทำกำไรสเปรด พร้อมกับมูลค่าเหรียญในคลังที่เปลี่ยนไป")
-
-    m5c3, m5c4 = st.columns(2)
-    with m5c3:
-        exec_xspring = st.number_input("ราคาปัจจุบันที่ XSpring", value=69000.0, step=100.0, key="m5_exec_x")
-    with m5c4:
-        exec_binance = st.number_input("ราคาปัจจุบันที่ Binance", value=70000.0, step=100.0, key="m5_exec_b")
-
-    trade_size_m5 = st.number_input("จำนวน BTC ที่จะยิงเทรดทำกำไรในรอบนี้", value=0.03, step=0.001, key="m5_trade_size")
-
-    if exec_xspring < exec_binance:
-        buy_price, sell_price = exec_xspring, exec_binance
-        strategy_m5 = "🛒 ซื้อที่ XSpring (ถูกกว่า) + 💰 ขายที่ Binance (แพงกว่า)"
-        trade_profit_m5 = (sell_price - buy_price) * trade_size_m5
-        st.success(f"**กลยุทธ์ที่บอทเลือก:** {strategy_m5}")
-    elif exec_xspring > exec_binance:
-        buy_price, sell_price = exec_binance, exec_xspring
-        strategy_m5 = "🛒 ซื้อที่ Binance (ถูกกว่า) + 💰 ขายที่ XSpring (แพงกว่า)"
-        trade_profit_m5 = (sell_price - buy_price) * trade_size_m5
-        st.warning(f"**กลยุทธ์ที่บอทเลือก:** {strategy_m5}")
+    if latest_xspring_price < latest_foreign_price:
+        buy_price_pf, sell_price_pf = latest_xspring_price, latest_foreign_price
+        strategy_pf = f"🛒 ซื้อที่ XSpring (ถูกกว่า) + 💰 ขายที่ {foreign_leg} (แพงกว่า)"
+        trade_profit_pf = (sell_price_pf - buy_price_pf) * trade_size_pf
+        st.success(f"**กลยุทธ์ ณ ราคาล่าสุด:** {strategy_pf}")
+    elif latest_xspring_price > latest_foreign_price:
+        buy_price_pf, sell_price_pf = latest_foreign_price, latest_xspring_price
+        strategy_pf = f"🛒 ซื้อที่ {foreign_leg} (ถูกกว่า) + 💰 ขายที่ XSpring (แพงกว่า)"
+        trade_profit_pf = (sell_price_pf - buy_price_pf) * trade_size_pf
+        st.warning(f"**กลยุทธ์ ณ ราคาล่าสุด:** {strategy_pf}")
     else:
-        trade_profit_m5 = 0.0
-        st.info("ราคาทั้งสองกระดานเท่ากัน ไม่มีส่วนต่าง (Spread = 0)")
+        trade_profit_pf = 0.0
+        st.info("ราคาล่าสุดของสองกระดานเท่ากัน ไม่มีสเปรดให้ทำกำไรตอนนี้")
 
-    current_btc_value_m5 = (btc_fund_xspring * exec_xspring) + (btc_fund_binance * exec_binance)
-    holding_pnl_m5 = current_btc_value_m5 - total_initial_btc_cost_m5
-    net_portfolio_pnl_m5 = trade_profit_m5 + holding_pnl_m5
+    current_btc_value_pf = (btc_fund_xspring * latest_xspring_price) + (btc_fund_foreign * latest_foreign_price)
+    holding_pnl_pf = current_btc_value_pf - total_initial_btc_cost_pf
+    net_portfolio_pnl_pf = trade_profit_pf + holding_pnl_pf
 
-    st.markdown("---")
-    st.markdown("### 🎯 สรุปผลประกอบการสุทธิของ Dealer")
+    pf1, pf2, pf3 = st.columns(3)
+    pf1.metric("1. กำไรจากสเปรด ณ ราคาล่าสุด", f"{trade_profit_pf:,.2f} THB")
+    pf2.metric("2. กำไร/ขาดทุนจากสต็อก (Holding PnL)", f"{holding_pnl_pf:,.2f} THB", delta=f"{holding_pnl_pf:,.2f}")
+    pf3.metric("3. สุทธิรวมทั้งพอร์ต (Net PnL)", f"{net_portfolio_pnl_pf:,.2f} THB", delta=f"{net_portfolio_pnl_pf:,.2f}")
 
-    m5r1, m5r2, m5r3 = st.columns(3)
-    m5r1.metric("1. กำไรจากสเปรด (Trading Profit)", f"{trade_profit_m5:,.2f} THB")
-    m5r2.metric("2. กำไร/ขาดทุนจากสต็อกเหรียญ (Holding PnL)", f"{holding_pnl_m5:,.2f} THB", delta=f"{holding_pnl_m5:,.2f}")
-    m5r3.metric("3. สุทธิรวมทั้งพอร์ต (Net PnL)", f"{net_portfolio_pnl_m5:,.2f} THB", delta=f"{net_portfolio_pnl_m5:,.2f}")
-
-    if net_portfolio_pnl_m5 < 0:
-        st.error("⚠️ **คำเตือน:** แม้บอทจะทำกำไรจากสเปรดได้ แต่พอร์ตภาพรวมยังติดลบหนัก เพราะโดนพิษราคาเหรียญในคลังร่วงลากลงมา!")
+    if net_portfolio_pnl_pf < 0:
+        st.error("⚠️ พอร์ตติดลบสุทธิ ณ ราคาล่าสุด แม้จะมีสเปรดให้ทำกำไร เพราะมูลค่าสต็อกเหรียญที่ถือไว้ลดลงมากกว่า")
     else:
-        st.success("🎉 **ยอดเยี่ยม:** พอร์ตภาพรวมเป็นบวก ทั้งกำไรสเปรดและมูลค่าเหรียญหนุนส่งกันอย่างสวยงาม!")
+        st.success("🎉 พอร์ตเป็นบวกสุทธิ ณ ราคาล่าสุด ทั้งกำไรสเปรดและมูลค่าสต็อกช่วยกันหนุนพอร์ต")
+
+    st.markdown("#### 📈 มูลค่าพอร์ต Pre-funded ย้อนหลัง (ใช้ราคาจริงจาก Backtest ด้านบนทั้งเส้น)")
+    port_hist = pd.DataFrame(index=df_bt.index)
+    port_hist["Holding_Value_THB"] = btc_fund_xspring * df_bt["XSpring"] + btc_fund_foreign * df_bt[foreign_leg]
+    port_hist["Holding_PnL_THB"] = port_hist["Holding_Value_THB"] - total_initial_btc_cost_pf
+    fig_pf = go.Figure()
+    fig_pf.add_trace(go.Scatter(
+        x=port_hist.index, y=port_hist["Holding_PnL_THB"], name="Holding PnL",
+        line=dict(color=PRIMARY_COLOR, width=1.6), fill="tozeroy",
+        fillcolor="rgba(0,230,118,0.15)",
+        hovertemplate="%{x|%d %b %Y}<br>Holding PnL: %{y:,.0f} THB<extra></extra>"
+    ))
+    fig_pf.add_hline(y=0, line=dict(color=MUTED_TEXT, dash="dash"))
+    fig_pf.update_yaxes(title_text="THB")
+    fig_pf = style_fig(fig_pf, height=360)
+    st.plotly_chart(fig_pf, use_container_width=True)
+
+    st.caption(
+        f"เส้นนี้คำนวณจากจำนวน BTC ที่คุณตุนไว้จริง × ราคาปิดจริงย้อนหลังของ XSpring/{foreign_leg} (ชุดข้อมูลเดียวกับ Backtest ด้านบน) "
+        "เทียบกับต้นทุนที่ซื้อมา จึงเห็นได้ว่าความเสี่ยงสต็อกที่แท้จริงเคลื่อนไหวตามราคาตลาดจริงทุกวัน ไม่ใช่แค่ตัวเลข ณ วันเดียวแบบกรอกมือ"
+    )
 
 # ----------------------------------------------------
-# MODULE 6: SPOT VS FUTURES BASIS ARBITRAGE
+# MODULE 5: SPOT VS FUTURES BASIS ARBITRAGE
 # ----------------------------------------------------
-elif app_mode == "6. Spot vs Futures Basis Arbitrage":
+elif app_mode == "5. Spot vs Futures Basis Arbitrage":
     st.markdown("# ⚖️ Spot vs Futures Basis Arbitrage")
     st.markdown(
         f"<span style='color:{MUTED_TEXT};'>ระบบจำลองการล็อกกำไรจากส่วนต่าง (Basis) แบบ Delta Neutral ไม่สนทิศทางตลาด — กรอกราคาเอง (manual what-if)</span>",
