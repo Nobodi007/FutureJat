@@ -1021,9 +1021,10 @@ elif app_mode == "4. XSpring Arbitrage — Backtest & Live Position PnL":
     # ใช้ df_bt / exchange_list_bt ที่ดึงมาจริงแล้วด้านบน แทนที่จะให้กรอกราคาปัจจุบันเอง
     # ----------------------------------------------------
     st.markdown("---")
-    st.markdown("### 3. เงินทุนจริงของคุณ × ราคาตลาดจริง (Pre-funded Position → Live PnL)")
+    st.markdown("### 3. เงินทุนจริงของคุณ × ราคาตลาดจริง (Pre-funded Position → PnL ตามวันที่เลือก)")
     st.caption(
-        "กรอกแค่เงินต้น/จำนวน BTC/ราคาที่คุณซื้อตุนไว้จริง ระบบจะดึงราคาล่าสุด (และราคาย้อนหลังทั้งเส้น) "
+        "กรอกแค่เงินต้น/จำนวน BTC/ราคาที่คุณซื้อตุนไว้จริง แล้วเลือกวันที่ต้องการดูผล (ไม่ต้อง real-time) "
+        "ระบบจะดึงราคาจริงของวันนั้น (และราคาย้อนหลังทั้งเส้นสำหรับกราฟด้านล่าง) "
         "จากชุดข้อมูลจริงในส่วน Backtest ด้านบนมาคำนวณกำไรขาดทุนให้อัตโนมัติ — ไม่ต้องพิมพ์ราคาปัจจุบันเอง เพราะข้อมูลเชื่อมกันแล้ว"
     )
 
@@ -1032,13 +1033,21 @@ elif app_mode == "4. XSpring Arbitrage — Backtest & Live Position PnL":
         exchange_list_bt, key="m4_foreign_leg"
     )
 
-    latest_xspring_price = float(df_bt["XSpring"].iloc[-1])
-    latest_foreign_price = float(df_bt[foreign_leg].iloc[-1])
-    latest_date_bt = df_bt.index[-1]
+    selected_date_pf = st.date_input(
+        "📅 เลือกวันที่ต้องการใช้ราคา (ไม่ต้อง real-time — เลือกวันไหนก็ได้ในช่วงข้อมูลที่ดึงมา)",
+        value=df_bt.index[-1].date(),
+        min_value=df_bt.index[0].date(),
+        max_value=df_bt.index[-1].date(),
+        key="m4_pf_date",
+    )
+    idx_pos_pf = df_bt.index.get_indexer([pd.Timestamp(selected_date_pf)], method="nearest")[0]
+    picked_date_bt = df_bt.index[idx_pos_pf]
+    xspring_price_pf = float(df_bt["XSpring"].iloc[idx_pos_pf])
+    foreign_price_pf = float(df_bt[foreign_leg].iloc[idx_pos_pf])
 
     st.info(
-        f"📡 **ราคาล่าสุดที่ดึงมาใช้คำนวณ** (ข้อมูลวันที่ {latest_date_bt:%d %b %Y}): "
-        f"XSpring ≈ **{latest_xspring_price:,.2f} THB** | {foreign_leg} ≈ **{latest_foreign_price:,.2f} THB**"
+        f"📡 **ราคา ณ วันที่เลือก** (ข้อมูลจริงวันที่ {picked_date_bt:%d %b %Y}): "
+        f"XSpring ≈ **{xspring_price_pf:,.2f} THB** | {foreign_leg} ≈ **{foreign_price_pf:,.2f} THB**"
     )
 
     pfc1, pfc2 = st.columns(2)
@@ -1061,36 +1070,36 @@ elif app_mode == "4. XSpring Arbitrage — Backtest & Live Position PnL":
 
     total_initial_btc_cost_pf = cost_xspring + cost_foreign
     trade_size_pf = st.number_input(
-        "จำนวน BTC ที่จะยิงเทรดทำกำไรสเปรด ณ ราคาล่าสุด", value=0.03, step=0.001, key="m4_trade_size_pf"
+        "จำนวน BTC ที่จะยิงเทรดทำกำไรสเปรด ณ วันที่เลือก", value=0.03, step=0.001, key="m4_trade_size_pf"
     )
 
-    if latest_xspring_price < latest_foreign_price:
-        buy_price_pf, sell_price_pf = latest_xspring_price, latest_foreign_price
+    if xspring_price_pf < foreign_price_pf:
+        buy_price_pf, sell_price_pf = xspring_price_pf, foreign_price_pf
         strategy_pf = f"🛒 ซื้อที่ XSpring (ถูกกว่า) + 💰 ขายที่ {foreign_leg} (แพงกว่า)"
         trade_profit_pf = (sell_price_pf - buy_price_pf) * trade_size_pf
-        st.success(f"**กลยุทธ์ ณ ราคาล่าสุด:** {strategy_pf}")
-    elif latest_xspring_price > latest_foreign_price:
-        buy_price_pf, sell_price_pf = latest_foreign_price, latest_xspring_price
+        st.success(f"**กลยุทธ์ ณ วันที่ {picked_date_bt:%d %b %Y}:** {strategy_pf}")
+    elif xspring_price_pf > foreign_price_pf:
+        buy_price_pf, sell_price_pf = foreign_price_pf, xspring_price_pf
         strategy_pf = f"🛒 ซื้อที่ {foreign_leg} (ถูกกว่า) + 💰 ขายที่ XSpring (แพงกว่า)"
         trade_profit_pf = (sell_price_pf - buy_price_pf) * trade_size_pf
-        st.warning(f"**กลยุทธ์ ณ ราคาล่าสุด:** {strategy_pf}")
+        st.warning(f"**กลยุทธ์ ณ วันที่ {picked_date_bt:%d %b %Y}:** {strategy_pf}")
     else:
         trade_profit_pf = 0.0
-        st.info("ราคาล่าสุดของสองกระดานเท่ากัน ไม่มีสเปรดให้ทำกำไรตอนนี้")
+        st.info("ราคาของสองกระดาน ณ วันที่เลือกเท่ากัน ไม่มีสเปรดให้ทำกำไร")
 
-    current_btc_value_pf = (btc_fund_xspring * latest_xspring_price) + (btc_fund_foreign * latest_foreign_price)
+    current_btc_value_pf = (btc_fund_xspring * xspring_price_pf) + (btc_fund_foreign * foreign_price_pf)
     holding_pnl_pf = current_btc_value_pf - total_initial_btc_cost_pf
     net_portfolio_pnl_pf = trade_profit_pf + holding_pnl_pf
 
     pf1, pf2, pf3 = st.columns(3)
-    pf1.metric("1. กำไรจากสเปรด ณ ราคาล่าสุด", f"{trade_profit_pf:,.2f} THB")
+    pf1.metric("1. กำไรจากสเปรด ณ วันที่เลือก", f"{trade_profit_pf:,.2f} THB")
     pf2.metric("2. กำไร/ขาดทุนจากสต็อก (Holding PnL)", f"{holding_pnl_pf:,.2f} THB", delta=f"{holding_pnl_pf:,.2f}")
     pf3.metric("3. สุทธิรวมทั้งพอร์ต (Net PnL)", f"{net_portfolio_pnl_pf:,.2f} THB", delta=f"{net_portfolio_pnl_pf:,.2f}")
 
     if net_portfolio_pnl_pf < 0:
-        st.error("⚠️ พอร์ตติดลบสุทธิ ณ ราคาล่าสุด แม้จะมีสเปรดให้ทำกำไร เพราะมูลค่าสต็อกเหรียญที่ถือไว้ลดลงมากกว่า")
+        st.error("⚠️ พอร์ตติดลบสุทธิ ณ วันที่เลือก แม้จะมีสเปรดให้ทำกำไร เพราะมูลค่าสต็อกเหรียญที่ถือไว้ลดลงมากกว่า")
     else:
-        st.success("🎉 พอร์ตเป็นบวกสุทธิ ณ ราคาล่าสุด ทั้งกำไรสเปรดและมูลค่าสต็อกช่วยกันหนุนพอร์ต")
+        st.success("🎉 พอร์ตเป็นบวกสุทธิ ณ วันที่เลือก ทั้งกำไรสเปรดและมูลค่าสต็อกช่วยกันหนุนพอร์ต")
 
     st.markdown("#### 📈 มูลค่าพอร์ต Pre-funded ย้อนหลัง (ใช้ราคาจริงจาก Backtest ด้านบนทั้งเส้น)")
     port_hist = pd.DataFrame(index=df_bt.index)
@@ -1104,6 +1113,8 @@ elif app_mode == "4. XSpring Arbitrage — Backtest & Live Position PnL":
         hovertemplate="%{x|%d %b %Y}<br>Holding PnL: %{y:,.0f} THB<extra></extra>"
     ))
     fig_pf.add_hline(y=0, line=dict(color=MUTED_TEXT, dash="dash"))
+    fig_pf.add_vline(x=picked_date_bt, line=dict(color=ACCENT_BLUE, dash="dot"),
+                      annotation_text="วันที่เลือก", annotation_font_color=ACCENT_BLUE)
     fig_pf.update_yaxes(title_text="THB")
     fig_pf = style_fig(fig_pf, height=360)
     st.plotly_chart(fig_pf, use_container_width=True)
