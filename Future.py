@@ -859,6 +859,7 @@ elif app_mode == "4. XSpring Arbitrage — Backtest & Live Position PnL":
         exchange_list_bt.append(ex)
 
     df_bt = df_bt.dropna()
+    df_bt = df_bt[~df_bt.index.duplicated(keep="last")].sort_index()
     if df_bt.empty or len(exchange_list_bt) == 0:
         st.error("⚠️ ข้อมูลที่ดึงมาไม่พอสำหรับคำนวณ (วันที่ไม่ตรงกันหรือข้อมูลไม่พอ)")
         st.stop()
@@ -1040,7 +1041,9 @@ elif app_mode == "4. XSpring Arbitrage — Backtest & Live Position PnL":
         max_value=df_bt.index[-1].date(),
         key="m4_pf_date",
     )
-    idx_pos_pf = df_bt.index.get_indexer([pd.Timestamp(selected_date_pf)], method="nearest")[0]
+    # ใช้ argmin หาความต่างของเวลาแทน get_indexer(method="nearest") เพราะ get_indexer
+    # ต้องการ index ที่ unique เท่านั้น มิฉะนั้นจะโยน InvalidIndexError — วิธีนี้ทำงานได้เสมอ
+    idx_pos_pf = int(np.abs(df_bt.index - pd.Timestamp(selected_date_pf)).argmin())
     picked_date_bt = df_bt.index[idx_pos_pf]
     xspring_price_pf = float(df_bt["XSpring"].iloc[idx_pos_pf])
     foreign_price_pf = float(df_bt[foreign_leg].iloc[idx_pos_pf])
