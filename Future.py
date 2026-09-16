@@ -1048,16 +1048,43 @@ elif app_mode == "4. XSpring Arbitrage — Backtest & Live Position PnL":
     xspring_price_pf = float(df_bt["XSpring"].iloc[idx_pos_pf])
     foreign_price_pf = float(df_bt[foreign_leg].iloc[idx_pos_pf])
 
+    # Sanity check: เทียบกับราคาตลาดโลกอ้างอิง (BTC-USD × USDTHB จาก Yahoo Finance) ที่วันเดียวกัน
+    # เพื่อยืนยันว่าราคาที่ใช้คำนวณไม่ได้ผิดปกติ/แปลงสกุลเงินซ้ำซ้อน (ตัวเลขหลักล้านบาทเป็นเรื่องปกติ
+    # เพราะ BTC 1 เหรียญมีมูลค่าหลักล้านบาทจริงในช่วงปีหลังๆ ไม่ใช่บั๊ก)
+    ref_price_pf = float(
+        (df_market_full["BTC-USD"] * df_market_full["USDTHB=X"])
+        .reindex([picked_date_bt], method="nearest").iloc[0]
+    )
+    xspring_dev_pct = (xspring_price_pf / ref_price_pf - 1) * 100
+    foreign_dev_pct = (foreign_price_pf / ref_price_pf - 1) * 100
+
     st.info(
         f"📡 **ราคา ณ วันที่เลือก** (ข้อมูลจริงวันที่ {picked_date_bt:%d %b %Y}): "
         f"XSpring ≈ **{xspring_price_pf:,.2f} THB** | {foreign_leg} ≈ **{foreign_price_pf:,.2f} THB**"
     )
+    st.caption(
+        f"🔍 **Sanity check** เทียบกับราคาตลาดโลกอ้างอิง (BTC-USD × USDTHB) วันเดียวกัน ≈ {ref_price_pf:,.2f} THB "
+        f"→ XSpring ต่าง {xspring_dev_pct:+.2f}% | {foreign_leg} ต่าง {foreign_dev_pct:+.2f}% "
+        "(ตัวเลขหลักล้านบาทถือว่าปกติ เพราะ BTC 1 เหรียญมีมูลค่าหลักล้านบาทจริงในช่วงปีหลังๆ ไม่ใช่บั๊ก "
+        "แต่ถ้าค่าต่างเกิน ±10% ให้ลองเปลี่ยนกระดาน/วันที่ เพราะอาจเป็นวันที่ข้อมูลกระดานนั้นผิดปกติ)"
+    )
+
+    # Auto-fill ราคาที่ซื้อตุนไว้จริง ด้วยราคาตลาดจริง ณ วันที่เลือก ทุกครั้งที่เปลี่ยนวันที่/เปลี่ยนกระดาน
+    # (ยังแก้ไขเองได้ตามปกติ — ค่าจะถูกเติมใหม่อีกครั้งเฉพาะตอนเปลี่ยนวันที่หรือกระดานเท่านั้น)
+    pf_autofill_key = (foreign_leg, str(picked_date_bt))
+    if st.session_state.get("m4_pf_autofill_key") != pf_autofill_key:
+        st.session_state["m4_price_x"] = round(xspring_price_pf, 2)
+        st.session_state["m4_price_f"] = round(foreign_price_pf, 2)
+        st.session_state["m4_pf_autofill_key"] = pf_autofill_key
 
     pfc1, pfc2 = st.columns(2)
     with pfc1:
         st.markdown("#### 🏦 ฝั่ง XSpring (ไทย)")
         init_cap_xspring = st.number_input("เงินต้นตั้งต้น XSpring (THB)", value=1000000.0, step=10000.0, key="m4_cap_x")
-        pre_xspring = st.number_input("ราคาที่ซื้อตุน BTC ไว้จริงที่ XSpring (THB)", value=70000.0, step=100.0, key="m4_price_x")
+        pre_xspring = st.number_input(
+            "ราคาที่ซื้อตุน BTC ไว้จริงที่ XSpring (THB) — เติมอัตโนมัติตามวันที่เลือก แก้ไขเองได้",
+            step=100.0, key="m4_price_x"
+        )
         btc_fund_xspring = st.number_input("จำนวน BTC ที่ตุนไว้ที่ XSpring", value=1.0, step=0.1, key="m4_btc_x")
         cost_xspring = pre_xspring * btc_fund_xspring
         remaining_xspring = init_cap_xspring - cost_xspring
@@ -1065,7 +1092,10 @@ elif app_mode == "4. XSpring Arbitrage — Backtest & Live Position PnL":
     with pfc2:
         st.markdown(f"#### 🌐 ฝั่ง {foreign_leg} (ต่างประเทศ)")
         init_cap_foreign = st.number_input(f"เงินต้นตั้งต้น {foreign_leg} (THB)", value=1000000.0, step=10000.0, key="m4_cap_f")
-        pre_foreign = st.number_input(f"ราคาที่ซื้อตุน BTC ไว้จริงที่ {foreign_leg} (THB)", value=70800.0, step=100.0, key="m4_price_f")
+        pre_foreign = st.number_input(
+            f"ราคาที่ซื้อตุน BTC ไว้จริงที่ {foreign_leg} (THB) — เติมอัตโนมัติตามวันที่เลือก แก้ไขเองได้",
+            step=100.0, key="m4_price_f"
+        )
         btc_fund_foreign = st.number_input(f"จำนวน BTC ที่ตุนไว้ที่ {foreign_leg}", value=1.0, step=0.1, key="m4_btc_f")
         cost_foreign = pre_foreign * btc_fund_foreign
         remaining_foreign = init_cap_foreign - cost_foreign
